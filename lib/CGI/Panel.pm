@@ -7,7 +7,7 @@ use Apache::Session::File;
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.95;
+	$VERSION     = 0.96;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -22,66 +22,94 @@ CGI::Panel - Create sophisticated event-driven web applications from simple pane
 
 =head1 SYNOPSIS
 
-  A very simple application...
+A very simple working application consisting of a driver cgi and two panel classes...
 
-    ---------------
-
-  in simpleapp.cgi:
+In simpleapp.cgi:
 
     use SimpleApp;
     my $simple_app = obtain SimpleApp;
     $simple_app->cycle();
 
-    ---------------
-
-  in SimpleApp.pm:
+In SimpleApp.pm:
 
     package SimpleApp;
 
     use strict;
-    use Basket;
     use base qw(CGI::Panel);
+    use Basket;
 
     sub init {
-	my ($self) = @_;
-	$self->add_panel('basket', new Basket); # Add a sub-panel
-	$self->{count} = 1;   # Initialise some persistent data
+        my ($self) = @_;
+        $self->add_panel('basket1', new Basket); # Add a sub-panel
+        $self->add_panel('basket2', new Basket); # Add a sub-panel
+        $self->add_panel('basket3', new Basket); # Add a sub-panel
+        $self->{count} = 1;   # Initialise some persistent data
     }
 
     sub _event_add {    # Respond to the button click event below
-	my ($self, $event) = @_;
-
-	$self->{count}++;  # Change the persistent data
+        my ($self, $event) = @_;
+        
+        $self->{count}++;  # Change the persistent data
     }
 
     sub display {
-	my ($self) = @_;
-
-	return
-	    'This is a very simple app.<p>' .
-	    # Display the persistent data...
-	    "My current count is $self->{count}<p>" .
-	    # Display the sub-panel...
-	    $self->panel('basket')->display . '<p>' .
-	    # Display a button that will generate an event...
-	    $self->event_button(label => 'Add 1', name => 'add'); 
+        my ($self) = @_;
+    
+        return
+    	'This is a very simple app.<p>' .
+    	# Display the persistent data...
+    	"My current count is $self->{count}<p>" .
+    	# Display the sub-panels...
+    	"<table><tr>" .
+    	"<td>" . $self->panel('basket1')->display . "</td>" .
+    	"<td>" . $self->panel('basket2')->display . "</td>" .
+    	"<td>" . $self->panel('basket3')->display . "</td>" .
+        "</tr></table>" .
+    	# Display a button that will generate an event...
+    	$self->event_button(label => 'Add 1', name => 'add');
     }
 
-    1;
+1;
 
-    ---------------
-
-  in Basket.pm:
+In Basket.pm:
 
     package Basket;
-    use base qw(CGI::Panel);
 
-    sub display {
-        'I have the potential to be a shopping basket one day'
+    use strict;
+    use base qw(CGI::Panel);
+    
+    sub init {
+        my ($self) = @_;
+    
+        $self->{contents} = [];
     }
+    
+    sub _event_add {
+        my ($self, $event) = @_;
+    
+        my %local_params = $self->local_params;
+    
+        push @{$self->{contents}}, $local_params{item_name};
+    }
+    
+    sub display {
+        my ($self) = @_;
+    
+        return
+          '<table bgcolor="#CCCCFF">' .
+          join('', (map { "<tr><td>$_</td></tr>" } @{$self->{contents}})) .
+          '<tr>' .
+    	  '<td>' . $self->local_textfield({name => 'item_name', size => 10}) . '</td>' .
+    	  '<td>' . $self->event_button(label => 'Add', name => 'add') . '</td>' .
+          '</tr>' .
+          '</table>';
+    };
+    
     1;
 
-    ---------------
+This example is included with the module.  It's in the 'demo'
+directory and can be seen in action at
+http://www.cyberdesignfactory.com/public-cgi-bin/simpleapp.cgi
 
 =head1 DESCRIPTION
 
@@ -237,6 +265,7 @@ sub init
 Get or set the parent of the panel object.
 
 Examples:
+
     my $parent = $self->parent;
     $self->parent($other_panel);
 
@@ -256,18 +285,7 @@ sub parent {
 }
 
 ###############################################################
-
-=head2 state
-
-This method is provided for convenience.
-Get or set the state.  (Simple accessor for $self->{_state})
-
-Examples:
-    my $state = $self->state;
-    $self->state('STATE1');
-
-=cut
-
+# We should remove this state method as it's unnecessary and confusing
 ###############################################################
 
 sub state {
@@ -491,7 +509,7 @@ that input from their %local_params hash.
 
 eg
 
-    my %local_params = $self->local_params
+    my %local_params = $self->local_params;
     my $name = $local_params{name};
 
 =cut
@@ -538,13 +556,17 @@ probably be encrypting what is passed through in a later version.
                  (defaults to name value if not specified)
                  ('_event_' is prepended to the routine name)
     other_tags:  Other tags for the html item
-  eg:
-    $shop->event_button(label      => 'Add Item',
-                        name       => 'add',
-                        routine    => 'add',
-                        other_tags => {
-                            class => 'myclass'
-                        });
+
+For example:
+
+    $shop->event_button(
+        label      => 'Add Item',
+        name       => 'add',
+        routine    => 'add',
+        other_tags => {
+            class => 'myclass'
+        }
+    );
 
 =cut
 
@@ -604,12 +626,15 @@ by the next incarnation of the application.
     other_tags:  Other tags for the html item
     img_tags:    Other tags for the image (if the link is an image)
 
-  eg:
-    $shop->event_link(label => 'Add Item',
-                      name  => 'add',
-                      other_tags => {
-                          width => 20
-                      })
+For example:
+
+    $shop->event_link(
+        label => 'Add Item',
+        name  => 'add',
+        other_tags => {
+            width => 20
+        }
+    );
 
 =cut
 

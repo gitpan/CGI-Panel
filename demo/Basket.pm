@@ -1,7 +1,7 @@
 package Basket;
-use base qw(CGI::Panel);
 
-use CGI;
+use strict;
+use base qw(CGI::Panel);
 
 sub init {
     my ($self) = @_;
@@ -20,18 +20,14 @@ sub _event_add {
 sub display {
     my ($self) = @_;
 
-    my $cgi = new CGI;
-
     return
-      $cgi->table({bgcolor => '#CCCCFF'},
-        (
-	  map { $cgi->Tr($cgi->td($_)) } @{$self->{contents}}
-        ),
-        $cgi->Tr(
-	  $cgi->td($self->local_textfield({name => 'item_name', size => 10})),
-	  $cgi->td($self->event_button(label => 'Add', name => 'add'))
-        )
-      );
+      '<table bgcolor="#CCCCFF">' .
+	join('', (map { "<tr><td>$_</td></tr>" } @{$self->{contents}})) .
+        '<tr>' .
+	  '<td>' . $self->local_textfield({name => 'item_name', size => 10}) . '</td>' .
+	  '<td>' . $self->event_button(label => 'Add', name => 'add') . '</td>' .
+        '</tr>' .
+      '</table>';
 };
 
 1;

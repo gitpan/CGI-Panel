@@ -1,9 +1,8 @@
 package SimpleApp;
 
 use strict;
-use warnings;
-use Basket;
 use base qw(CGI::Panel);
+use Basket;
 
 sub init {
     my ($self) = @_;

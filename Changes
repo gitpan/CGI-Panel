@@ -14,6 +14,8 @@ Revision history for Perl extension CGI::Panel.
         - Fixed bug (not working if just a main panel) and a few typos
 0.95  Fri Nov 15
 	- Combined CGI::Panel and CGI::Panel::MainPanel to make module easier to use
+0.96  Sat Nov 16
+        - Fixed docs and put full example in synopsis
 
 
 
