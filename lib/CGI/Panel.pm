@@ -6,7 +6,7 @@ use CGI::Carp 'fatalsToBrowser';
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.92;
+	$VERSION     = 0.93;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -97,7 +97,20 @@ An application is constructed from a set of 'panels', each of which
 can contain other panels.  The panels are managed behind the scenes
 as persistent objects.  See the sample applications for examples of
 how complex object-based applications can be built from simple
-encapsulated components. (To do)
+encapsulated components.  To try the demo app, copy the contents of
+the 'demo' directory to a cgi-bin directory.
+
+Until the software reaches version 1.00 it will be considered
+beta software.  You should be able to use it in production code,
+however I strongly recommend that you 'stabilise' your version
+of the module if you release any code that uses it.  By this I
+mean that, once you've tested your app thorougly, you rename
+CGI::Panel and CGI::Panel::MainPanel as, for example App::CGIPanel
+and APP::Panel::CGIMainPanel and inherit from these, then include
+these with your other panels.  This will protect you from any
+changes in the interface.  I'm not planning to make many changes,
+however one thing I'm considering is making the event objects
+instead of hashes.
 
 =head1 USAGE
 
@@ -213,8 +226,8 @@ sub parent {
 
     die "Parent not a panel object"
         if $parent && !($parent->isa('CGI::Panel'));
-    $self->{_parent} = $parent if $parent;
-    die "No parent set" unless $self->{_parent};
+    $self->{_parent} = $parent if defined($parent);
+    die "No parent set" unless defined($self->{_parent});
 
     return $self->{_parent};
 }
@@ -237,25 +250,24 @@ Examples:
 sub state {
     my ($self, $state) = @_;
 
-    $self->{_state} = $state if $state;
-    croak "No state set" unless defined($self->{_state});
+    $self->{_state} = $state if defined($state);
+#    croak "No state set" unless defined($self->{_state});
 
     return $self->{_state};
 }
 
 ###############################################################
 
-=head2 get_persistent_id
+=head2 get_session_id
 
 Gets the session id for the application
 
 Note:  It's essential that all panels are added using the
-proper add_panel routine.  This routine traverses up to the
-main panel by way of each panel's 'parent' reference.
+proper add_panel routine for this routine to work correctly.
 
 Example:
 
-    my $id = $self->get_persistent_id;
+    my $id = $self->get_session_id;
 
 =cut
 
@@ -263,6 +275,8 @@ Example:
 
 sub get_persistent_id {
     my ($self) = @_;
+
+    warn "get_persistent id now called get_session_id - please rename";
 
     $self->get_session_id
 }
@@ -280,17 +294,17 @@ sub get_session_id {
     # the right order or it doesn't work!
     # It should be called get_session_id anyway!
 
-    die "ERROR: No parent found for get_persistent_id call"
-	unless ref($self->parent);
+    die "ERROR: No main panel found for get_session_id call"
+	unless ref($self->main_panel);
 
-    return $self->parent->get_persistent_id
+    return $self->main_panel->get_session_id
 }
 
 ###############################################################
 
 =head2 panel
 
-Retrieves a panel by name
+Retrieves a sub-panel by name
 
 Example:
 
@@ -332,14 +346,38 @@ sub get_panels {
 
 ###############################################################
 
-# Gets the id of the panel
-# If one is not currently stored, we need to generate a
-# new one with help from the main panel.
+=head2 get_id
+
+Gets the id of the panel
+If one is not currently stored, we generate a
+new one with help from the main panel.
+This method can be overridden if you want to give a unique name
+to a panel.
+
+Examples:
+
+    sub get_id { 'unique_name' }
+or
+    my $id = $self->get_id;
+
+and later...
+
+    $self->get_panel_by_id('unique_name');
+or
+    $self->get_panel_by_id($id);
+
+See documentation of get_panel_by_id in CGI::Panel::MainPanel
+for more details.  (Of course, you can also just use this get_id to
+get the auto-generated id and use that later in get_panel_by_id.)
+
+=cut
+
+###############################################################
 
 sub get_id {
     my ($self) = @_;
 
-    unless ($self->{id}) {
+    unless (defined($self->{id})) {
         my $main_panel = $self->main_panel;
         $self->{id} = $main_panel->register_panel($self);
     }
@@ -348,22 +386,33 @@ sub get_id {
 }
 
 ###############################################################
-#
-# Get the main panel (by recursing up the panel tree)
-#
-# This better method could be used to avoid the problem
-# with the get_session_id mechanism
-# (In fact we could just call $self->main_panel->get_session_id
+
+=head2 main_panel
+
+Get the main panel (by recursing up the panel tree)
+Eventually this will call the routine of the same name
+in CGI::Panel::MainPanel, which will return the main panel.
+
+Example:
+
+    my $main_panel = $self->main_panel;
+
+=cut
+
+###############################################################
 
 sub main_panel {
     my ($self) = @_;
 
-    # If we're the main panel, return us otherwise call
-    # our parent's main_panel routine.
+    # Return cached result if found
+    return $self->{_main_panel}
+        if $self->{_main_panel};
 
-    return $self->isa('CGI::Panel::MainPanel') ?
-        $self :
-        $self->parent->main_panel;
+    my $parent = $self->parent
+	or croak "Parent could not be found";
+
+    $self->{_main_panel} = $parent->main_panel;
+    return $self->{_main_panel};
 }
 
 ###############################################################
@@ -375,6 +424,7 @@ referential integrity, ie the child panel's parent value will
 be set to the current panel.  All panels should be added to
 their parents using this routine to keep referential integrity
 and allow certain other mechanisms to work.
+Specify the name to refer to the panel by and the panel object.
 
 Example:
 
@@ -443,7 +493,7 @@ sub local_params
 
     foreach my $key (keys %cgi_params) {
         my $value = $cgi_params{$key};
-        if (my ($lp_panel_id, $lp_name) = split(/\./, $key)) {
+        if (my ($lp_panel_id, $lp_name) = split($self->SEPRE, $key)) {
             if ($lp_panel_id eq $panel_id) {
                 $local_params{$lp_name} = $value;
             }
@@ -466,15 +516,19 @@ routine by changing what is passed through the browser.  We'll
 probably be encrypting what is passed through in a later version.
 
   Input:
-    label:    Caption to display on button
-    name:     Name of the event
-    routine:  Name of the event routine to call
-              (defaults to name value if not specified)
-              ('_event_' is prepended to the routine name)
+    label:       Caption to display on button
+    name:        Name of the event
+    routine:     Name of the event routine to call
+                 (defaults to name value if not specified)
+                 ('_event_' is prepended to the routine name)
+    other_tags:  Other tags for the html item
   eg:
-    $shop->event_button(label   => 'Add Item',
-                        name    => 'add',
-                        routine => 'add');
+    $shop->event_button(label      => 'Add Item',
+                        name       => 'add',
+                        routine    => 'add',
+                        other_tags => {
+                            class => 'myclass'
+                        });
 
 =cut
 
@@ -490,15 +544,28 @@ sub event_button
         or die "ERROR: event has no event name";
     my $panel_id = $self->get_id;
     my $routine = $args{routine} || $args{name};  # Default to name
+    my $other_tags = $args{other_tags};
 
-    my $n = "$name.$routine.$panel_id";
+    my $SEP = $self->SEP;
+    my $n = "$name$SEP$routine$SEP$panel_id";
 
     my $cgi = new CGI;
 
-    return $cgi->submit({
+    my $args_hash = {
         label => $label,
-        name => "eventbutton+$n"
-    });
+        name => "eventbutton+$n",
+    };
+    foreach my $other_tag (keys %$other_tags) {
+        $args_hash->{$other_tag} = $other_tags->{$other_tag}
+    }
+
+    return $cgi->submit($args_hash);
+
+  #  return $cgi->submit({
+  #      label => $label,
+  #      name => "eventbutton+$n",
+  #      style => $style
+  #  });
 }
 
 ###############################################################
@@ -510,18 +577,23 @@ re-cycles the application and generates an event to be handled
 by the next incarnation of the application.
 
   Input:
-    label:    Caption to display on link
+    label:       Caption to display on link
      * OR *
-    img:      Image to display as link
+    img:         Image to display as link
 
-    name:     Name of the event
-    routine:  Name of the event routine to call
-              (defaults to name value if not specified)
-              ('_event_' is prepended to the routine name)
+    name:        Name of the event
+    routine:     Name of the event routine to call
+                 (defaults to name value if not specified)
+                 ('_event_' is prepended to the routine name)
+    other_tags:  Other tags for the html item
+    img_tags:    Other tags for the image (if the link is an image)
 
   eg:
     $shop->event_link(label => 'Add Item',
-                      name  => 'add')
+                      name  => 'add',
+                      other_tags => {
+                          width => 20
+                      })
 
 =cut
 
@@ -539,19 +611,37 @@ sub event_link
         or die "ERROR: event_link has no event name";
     my $panel_id = $self->get_id;
     my $routine = $args{routine} || $args{name};  # Default to name
+    my $other_tags = $args{other_tags};
+    my $img_tags = $args{img_tags};
 
-    my $session_id = $self->get_persistent_id;
+    my $session_id = $self->get_session_id;
 
-    my $n = "$name.$routine.$panel_id";
+    my $SEP = $self->SEP;
+    my $n = "$name$SEP$routine$SEP$panel_id";
 
     my $href = "?session_id=$session_id&n=$n";
+    my $args_hash = {
+        href => $href,
+    };
+    foreach my $other_tag (keys %$other_tags) {
+        $args_hash->{$other_tag} = $other_tags->{$other_tag}
+    }
+
     my $cgi = new CGI;
     my $output;
     if ($label) {
-        $output = $cgi->a({href => $href}, $label);
+  #      $output = $cgi->a({href => $href}, $label);
+        $output = $cgi->a($args_hash, $label);
     }
     else {
-        $output = $cgi->a({href => $href}, $cgi->img({src => $img}));
+        my $img_args_hash = {
+            src => $img,
+        };
+        foreach my $img_tag (keys %$img_tags) {
+            $img_args_hash->{$img_tag} = $img_tags->{$img_tag}
+        }
+    #    $output = $cgi->a($args_hash, $cgi->img({src => $img}));
+        $output = $cgi->a($args_hash, $cgi->img($img_args_hash));
     }
 
     return $output;
@@ -563,7 +653,29 @@ sub event_link
 
 The CGI input functions are available here with local_ prepended
 so the name can be made panel-specific, and they can be called
-as a method.
+as a method.  The same effect can be achieved by using the
+get_localised_name function for the name of the parameter.
+
+Example:
+
+    $self->local_textfield({name => 'testinput', size => 40})
+
+is equivalent to:
+
+    my $cgi = new CGI;
+    $cgi->textfield({name => $self->get_localised_name('testinput'), size => 40})
+
+Using these methods means that the panel will have exclusive
+access to the named input parameter.  So to obtain the value of
+the input parameter above, we would write the following:
+
+    my %local_params = $self->local_params;
+    my $test_input_value = $local_params('testinput');
+
+Note that with this techique, several parameters could have 
+input controls with the same name and they will each receive
+the correct value.  This is especially useful for sets of panels
+of the same class.
 
 =cut
 
@@ -573,40 +685,92 @@ as a method.
 
 # May be able to combine these into one AUTOLOAD function
 
+###############################################################
+
+=head2 get_localised_name
+
+Return a name that has the panel id encoded into it.  This is
+used by the local_... functions and can be used to build a custom
+html input control that will deliver it's value when the panel's
+local_params method is called.
+
+Example:
+
+    $output .= $cgi->textfield({name => $self->get_localised_name('sometext')});
+
+The equivalent could be done by calling:
+
+    $output .= $self->local_textfield({name => 'sometext'});
+
+=cut
+
+###############################################################
+
+sub get_localised_name {
+    my ($self, $name) = @_;
+
+    my $localised_name = $self->get_id . $self->SEP . $name;
+    return $localised_name;
+}
+
+###############################################################
+
+=head2 local_textfield
+
+Generate a localised textfield
+
+Example:
+
+    $output .= $self->local_textfield({name => 'sometext'});
+
+=cut
+
+###############################################################
+
 sub local_textfield {
      my ($self, $args) = @_;
      my $cgi = new CGI;
-     $args->{name} = $self->get_id . '.' . $args->{name};
+     $args->{name} = $self->get_localised_name($args->{name});
 
      return $cgi->textfield($args);
 }
 
+###############################################################
+
 sub local_textarea {
      my ($self, $args) = @_;
      my $cgi = new CGI;
-     $args->{name} = $self->get_id . '.' . $args->{name};
+     $args->{name} = $self->get_localised_name($args->{name});
 
      return $cgi->textarea($args);
 }
 
+###############################################################
+
 sub local_popup_menu {
      my ($self, $args) = @_;
      my $cgi = new CGI;
-     $args->{name} = $self->get_id . '.' . $args->{name};
+     $args->{name} = $self->get_localised_name($args->{name});
 
      return $cgi->popup_menu($args);
 }
 
+###############################################################
+
 sub local_radio_group {
      my ($self, $args) = @_;
      my $cgi = new CGI;
-     $args->{name} = $self->get_id . '.' . $args->{name};
+     $args->{name} = $self->get_localised_name($args->{name});
 
      return $cgi->radio_group($args);
 }
 
 ###############################################################
 
+sub SEP { ':.:' }
+sub SEPRE { qr{:\.:} }
+
+###############################################################
 
 1; #this line is important and will help the module return a true value
 __END__

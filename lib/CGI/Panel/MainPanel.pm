@@ -7,7 +7,7 @@ use Apache::Session::File;
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.92;
+	$VERSION     = 0.93;
 	@ISA         = qw (Exporter CGI::Panel);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -141,6 +141,32 @@ sub obtain
     my $messages = $class->interpret_messages();
     my $session_id = $messages->{session_id} || undef;
 
+    my %session = $class->get_or_create_apache_session($session_id);
+
+    my $panel;
+    if ($session{mainpanel}) {
+        $panel = $session{mainpanel};
+    }
+    else {
+        $panel = new $class;
+    }
+
+    # Store the session id in the panel object
+    $panel->{session_id} = $session{_session_id};
+
+    ## Store the panel information in the session file
+    #$panel->save;
+
+    return $panel;
+}
+
+sub old_obtain
+{
+    my ($class) = @_;
+
+    my $messages = $class->interpret_messages();
+    my $session_id = $messages->{session_id} || undef;
+
     my %session;
     # my %session = $class->get_session($session_id);
 
@@ -207,6 +233,62 @@ sub obtain
 
 ###############################################################
 
+sub tie_apache_session {
+    my ($self, $session_id) = @_;
+
+    my %session;
+    tie %session, 'Apache::Session::File', $session_id, {
+	Directory => $self->session_directory,
+	LockDirectory => $self->lock_directory
+    };
+
+    return %session;
+}
+
+sub get_or_create_apache_session {
+    my ($self, $session_id) = @_;
+
+    my %session;
+    eval {
+        %session = $self->tie_apache_session($session_id);
+	die "Session has expired" if $session{state} eq 'EXPIRED';
+    };
+
+    # If the session doesn't exist or has expired, create a new one
+    my $eval_result = $@;
+    if ($eval_result =~ /(expired|does not exist)/) {
+        %session = $self->tie_apache_session(undef);
+    }
+    elsif ($eval_result) {
+        die "Unexpected problem in tie_apache_session: $eval_result";
+    }
+
+    return %session;
+}
+
+sub end_session {
+    my ($self) = @_;
+
+    my $session_id = $self->get_session_id
+	or die "No session id";
+    my %session = $self->tie_apache_session($session_id);
+    $session{state} = 'EXPIRED';
+}
+
+sub xstart_new_session {
+    my ($self) = @_;
+
+#    $self->end_session;
+#    my %new_session = $self->tie_apache_session(undef);
+#    $new_session{mainpanel} = $self;
+
+#    my $class_name = ref($self->main_panel);
+#    $self->main_panel = $class_name->new;
+#    $self->main_panel->{session_id} = $new_session{_session_id};
+}
+
+###############################################################
+
 =head2 cycle
 
 Performs a complete cycle of the application
@@ -254,28 +336,23 @@ sub cycle
 
 ###############################################################
 
-=head2 get_persistent_id
+=head2 get_session_id
 
 Gets a special 'id' value that is specific to this particular
 session
 
 Use:
 
-    my $id = $self->get_persistent_id;
+    my $id = $self->get_session_id;
 
 =cut
 
 ###############################################################
 
-sub get_persistent_id
-{
+sub get_session_id {
     my ($self) = @_;
 
     return $self->{session_id};
-
-    # return
-    #     $self->{session_id}
-    #  || ($self->{session_id} = join('', map{(0..9)[int rand(10)]} (1..16)));
 }
 
 ###############################################################
@@ -316,34 +393,65 @@ sub save
 
 ###############################################################
 
-=head2 get_panel
+=head2 main_panel
+
+See documentation of main_panel function in CGI::Panel.
+Since we are the main panel this just returns self.
+
+=cut
+
+###############################################################
+
+sub main_panel {
+    my ($self) = @_;
+
+    return $self;
+}
+
+###############################################################
+
+=head2 get_panel_by_id
 
 Look up the panel in our list and return it.  Note that this is
 different to the 'panel' routine in CGI::Panel, which gets a
 sub-panel of the current panel by name.  All the panels
-in a an application should be registered with the main panel
+in a an application will be registered with the main panel
 which stores them in a special hash with an automatically
 generated key.  This routine gets any panel in the application
 based on the key supplied.
 
 Use:
 
-    my $panel_id = $main_panel->get_panel(3);
+    my $panel_id = $main_panel->get_panel_by_id(3);
 
 =cut
 
 ###############################################################
 
-sub get_panel
+sub get_panel_by_id
 {
     my ($self, $id) = @_;
 
+    # WE SHOULD PROBABLY START USING A HASH HERE
+    # IN CASE PANELS ARE REMOVED...
     my $panel = $self->{panel_list}->[$id];
-    die "ERROR: Panel ($id) not found" unless $panel;
+    die "ERROR: Panel ($id) not found:"
+        . join ("\n", map { "$_ => " . ref ($self->{panel_list}->[$_]) } (0..10))
+        unless $panel;
 
     return $panel;
 }
 
+###############################################################
+
+=head1 OTHER METHODS
+
+The following methods are used behind the scenes, usually from
+the 'cycle' method above.  They will generally be sufficient as
+they are but can be overridden if necessary for greater
+flexibility.
+
+=cut
 
 ###############################################################
 
@@ -372,17 +480,6 @@ sub register_panel
 
     return $list_size;
 }
-
-###############################################################
-
-=head1 OTHER METHODS
-
-The following methods are used behind the scenes, usually from
-the 'cycle' method above.  They will generally be sufficient as
-they are but can be overridden if necessary for greater
-flexibility.
-
-=cut
 
 ###############################################################
 
@@ -429,13 +526,13 @@ sub handle_event
 {
     my ($self, $event_details) = @_;
 
-    my ($name, $routine_name, $panel_id) = split(/\./, $event_details);
+    my ($name, $routine_name, $panel_id) = split($self->SEPRE, $event_details);
     die "ERROR: Unable to obtain name or routine name"
         unless $name && $routine_name;
 
     my $real_routine_name = "_event_" . $routine_name;
 
-    my $target_panel = $self->get_panel($panel_id);
+    my $target_panel = $self->get_panel_by_id($panel_id);
     $target_panel->$real_routine_name({name => $name});
 }
 
@@ -519,6 +616,8 @@ sub session_directory {
     return $session_directory;
 }
 
+###############################################################
+
 sub lock_directory {
     my ($self) = @_;
 
@@ -534,6 +633,8 @@ sub lock_directory {
     #$class_lock_directory = $lock_directory;
     return $lock_directory;
 }
+
+###############################################################
 
 1; #this line is important and will help the module return a true value
 __END__

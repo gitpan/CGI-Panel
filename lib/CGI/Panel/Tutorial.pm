@@ -8,7 +8,7 @@ use Apache::Session::File;
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.92;
+	$VERSION     = 0.93;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -29,6 +29,7 @@ CGI::Panel::Tutorial - Tutorial for CGI::Panel-based applications
 
 =head1 DESCRIPTION
 
+Not ready yet.
 
 =head1 USAGE
 
