@@ -6,6 +6,4 @@ MANIFEST.SKIP
 .cvsignore
 lib/CGI/Panel.pm
 t/01_ini.t
-lib/CGI/Panel/MainPanel.pm
-t/02_ini.t
 MANIFEST

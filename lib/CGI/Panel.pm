@@ -2,11 +2,12 @@ package CGI::Panel;
 use strict;
 use CGI;
 use CGI::Carp 'fatalsToBrowser';
+use Apache::Session::File;
 
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.94;
+	$VERSION     = 0.95;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -38,9 +39,8 @@ CGI::Panel - Create sophisticated event-driven web applications from simple pane
     package SimpleApp;
 
     use strict;
-    use warnings;
     use Basket;
-    use base qw(CGI::Panel::MainPanel);
+    use base qw(CGI::Panel);
 
     sub init {
 	my ($self) = @_;
@@ -85,6 +85,10 @@ CGI::Panel - Create sophisticated event-driven web applications from simple pane
 
 =head1 DESCRIPTION
 
+* Please note that the subclass CGI::Panel::MainPanel has now been
+deprecated to make using the module easier.  Please change any code
+which uses the module so that the main panel sub-classes CGI::Panel
+just like the other panels. *
 
 CGI::Panel allows applications to be built out of simple object-based
 components.  It'll handle the state of your data and objects so you
@@ -100,14 +104,30 @@ how complex object-based applications can be built from simple
 encapsulated components.  To try the demo app, copy the contents of
 the 'demo' directory to a cgi-bin directory.
 
+CGI::Panel allows you to design the logic of your application in an
+event-driven manner.  That is, you set up your application the way
+you want it, with special buttons and links that trigger 'events'.
+The application then sits back and when an event is triggered, the
+code associated with that event is run.  The code that responds to an
+event goes in the same class as the code that generates the event
+button or link, making the code more readable and maintainable.  If
+the event code changes the state of any of the panels, the panels
+will then stay in the new state, until their state is changed again.
+
+Each panel is encapsulated not only in terms of the code, but in
+terms of the form data that is passed through.  For example a panel
+class can be defined which has a textfield called 'name'.  Three
+instances of this panel can then exist simultaneously and each will
+get the correct value of the 'name' parameter when they read their
+parameters (see the 'local_params' method).
+
 Until the software reaches version 1.00 it will be considered
 beta software.  You should be able to use it in production code,
 however I strongly recommend that you 'stabilise' your version
 of the module if you release any code that uses it.  By this I
 mean that, once you've tested your app thoroughly, you rename
-CGI::Panel and CGI::Panel::MainPanel as, for example App::CGIPanel
-and App::Panel::CGIMainPanel and inherit from these, then include
-these with your other panels.  This will protect you from any
+CGI::Panel as, for example App::CGIPanel and inherit from this, then
+include this with your other panels.  This will protect you from any
 changes in the interface.  I'm not planning to make many changes,
 however one thing I'm considering is making the events objects
 instead of hashes.
@@ -230,7 +250,7 @@ sub parent {
     die "Parent not a panel object"
         if $parent && !($parent->isa('CGI::Panel'));
     $self->{_parent} = $parent if defined($parent);
-    die "No parent set" unless defined($self->{_parent});
+#    die "No parent set" unless defined($self->{_parent});
 
     return $self->{_parent};
 }
@@ -287,15 +307,8 @@ sub get_persistent_id {
 sub get_session_id {
     my ($self) = @_;
 
-    # We may need to think a bit more about this.  It might be
-    # better to find another way to do this, perhaps having a
-    # different name for the version of the method in the
-    # main panel and checking if we're the main panel and
-    # can call the method here, otherwise calling the parent's
-    # method.  Because at the moment, the App::Panel::MainPanel
-    # has to use base qw(CGI::Panel::MainPanel App::Panel) in
-    # the right order or it doesn't work!
-    # It should be called get_session_id anyway!
+    # If we're the main panel, return our stored session id
+    return $self->{session_id} unless $self->parent;
 
     die "ERROR: No main panel found for get_session_id call"
 	unless ref($self->main_panel);
@@ -369,9 +382,9 @@ and later...
 or
     $self->get_panel_by_id($id);
 
-See documentation of get_panel_by_id in CGI::Panel::MainPanel
-for more details.  (Of course, you can also just use this get_id to
-get the auto-generated id and use that later in get_panel_by_id.)
+See documentation of get_panel_by_id for more details.  (Of course,
+you can also just use this get_id to get the auto-generated id and
+use that later in get_panel_by_id.)
 
 =cut
 
@@ -393,8 +406,8 @@ sub get_id {
 =head2 main_panel
 
 Get the main panel (by recursing up the panel tree)
-Eventually this will call the routine of the same name
-in CGI::Panel::MainPanel, which will return the main panel.
+Eventually this will reach a panel without a parent,
+which we will assume to be the main panel.
 
 Example:
 
@@ -412,7 +425,7 @@ sub main_panel {
         if $self->{_main_panel};
 
     my $parent = $self->parent
-	or croak "Parent could not be found";
+        or return $self;
 
     $self->{_main_panel} = $parent->main_panel;
     return $self->{_main_panel};
@@ -608,7 +621,7 @@ sub event_link
 
     my $label = $args{label};
     my $img = $args{img};
-    die "ERROR: event_link has neither a label nor an image"
+    croak "ERROR: event_link has neither a label nor an image"
         unless $label || $img;
     my $name  = $args{name}
         or die "ERROR: event_link has no event name";
@@ -771,10 +784,438 @@ sub local_radio_group {
 
 ###############################################################
 
+# Define the separator used when passing panel ids etc
+# and a version which can be used in regexps
+
 sub SEP { ':.:' }
 sub SEPRE { qr{:\.:} }
 
 ###############################################################
 
+=head2 MAIN PANEL METHODS
+
+These methods provide extra functionality useful for the main
+panel of an application.  Apache::Session is used to handle session
+information.  An application built using the CGI::Panel framework should
+typically have one main panel and a hierarchy of other panels, all of
+which inherit from CGI::Panel.
+
+=head2 obtain
+
+Obtains the master panel object
+
+This will either restore the current master panel session
+or create a new one
+
+Use:
+
+    my $shop = obtain Shop;
+
+=cut
+
+###############################################################
+
+sub obtain
+{
+    my ($class) = @_;
+
+    my $messages = $class->interpret_messages();
+    my $session_id = $messages->{session_id} || undef;
+
+    my %session = $class->get_or_create_apache_session($session_id);
+
+    my $panel;
+    if ($session{mainpanel}) {
+        $panel = $session{mainpanel};
+    }
+    else {
+        $panel = new $class;
+    }
+
+    # Store the session id in the panel object
+    $panel->{session_id} = $session{_session_id};
+
+    ## Store the panel information in the session file
+    #$panel->save;
+
+    return $panel;
+}
+
+###############################################################
+
+sub tie_apache_session {
+    my ($self, $session_id) = @_;
+
+    my %session;
+    tie %session, 'Apache::Session::File', $session_id, {
+	Directory => $self->session_directory,
+	LockDirectory => $self->lock_directory
+    };
+
+    return %session;
+}
+
+sub get_or_create_apache_session {
+    my ($self, $session_id) = @_;
+
+    my %session;
+    eval {
+        %session = $self->tie_apache_session($session_id);
+	die "Session has expired" if $session{state} eq 'EXPIRED';
+    };
+
+    # If the session doesn't exist or has expired, create a new one
+    my $eval_result = $@;
+    if ($eval_result =~ /(expired|does not exist)/) {
+        %session = $self->tie_apache_session(undef);
+    }
+    elsif ($eval_result) {
+        die "Unexpected problem in tie_apache_session: $eval_result";
+    }
+
+    return %session;
+}
+
+sub end_session {
+    my ($self) = @_;
+
+    my $session_id = $self->get_session_id
+	or die "No session id";
+    my %session = $self->tie_apache_session($session_id);
+    $session{state} = 'EXPIRED';
+}
+
+###############################################################
+
+=head2 cycle
+
+Performs a complete cycle of the application
+
+Takes all the actions that are required for a complete cycle
+of the application, including processing events and form data
+and displaying the updated screen.  Also manages persistence
+for the panel hierarchy.
+
+Use:
+
+    $shop->cycle();
+
+=cut
+
+###############################################################
+
+sub cycle
+{
+    my ($self) = @_;
+
+    my $messages = $self->interpret_messages();
+
+    if ($messages->{event})
+    {
+        $self->handle_event($messages->{event});
+    }
+
+    if ($messages->{n})
+    {
+        $self->handle_link_event($messages->{n});
+    }
+
+    ## $self->update();  # Probably don't need this as this
+                         # will always be handled as an event
+
+    my $screen_name = $self->{screenname} || 'main';
+    my $screen_method = "screen_$screen_name";
+    $self->$screen_method();
+
+    $self->save();
+
+    return 1;
+}
+
+###############################################################
+
+=head2 save
+
+Saves an object to persistent storage indexed by session id
+
+Use:
+
+    $self->save;
+
+=cut
+
+###############################################################
+
+sub save
+{
+    my ($self) = @_;
+
+    my $session_id = $self->{session_id};
+
+    die "ERROR: No session id for save - this shouldn't be possible!"
+        unless $session_id;
+
+    my %session;
+
+    tie %session, 'Apache::Session::File', $session_id, {
+        Directory => $self->session_directory,
+        LockDirectory => $self->lock_directory
+    };
+
+    # Store our current state in the tied session hash (ie in persistent storage)
+    $session{mainpanel} = $self;
+
+    return 1;
+}
+
+###############################################################
+
+=head2 get_panel_by_id
+
+Look up the panel in our list and return it.  Note that this is
+different to the 'panel' routine in CGI::Panel, which gets a
+sub-panel of the current panel by name.  All the panels
+in an application will be registered with the main panel
+which stores them in a special hash with an automatically
+generated key.  This routine gets any panel in the application
+based on the key supplied.
+
+Use:
+
+    my $panel_id = $main_panel->get_panel_by_id(3);
+
+=cut
+
+###############################################################
+
+sub get_panel_by_id
+{
+    my ($self, $id) = @_;
+
+    # WE SHOULD PROBABLY START USING A HASH HERE
+    # IN CASE PANELS ARE REMOVED...
+    my $panel = $self->{panel_list}->[$id];
+    die "ERROR: Panel ($id) not found:"
+        . join ("\n", map { "$_ => " . ref ($self->{panel_list}->[$_]) } (0..10))
+        unless $panel;
+
+    return $panel;
+}
+
+###############################################################
+
+=head1 OTHER METHODS
+
+The following methods are used behind the scenes, usually from
+the 'cycle' method above.  They will generally be sufficient as
+they are but can be overridden if necessary for greater
+flexibility.
+
+=cut
+
+###############################################################
+
+=head2 register_panel
+
+Accept a panel object and 'register' it - ie store a reference to
+it in a special list.  Return the id (hash key) to the caller.
+
+Use:
+
+    my $id = $main_panel->register($panel);
+
+=cut
+
+###############################################################
+
+sub register_panel
+{
+    my ($self, $panel) = @_;
+
+    # Create the panel list if it doesn't already exist
+    $self->{panel_list} = [] unless $self->{panel_list};
+
+    my $list_size = scalar(@{$self->{panel_list}});
+    push @{$self->{panel_list}}, $panel;
+
+    return $list_size;
+}
+
+###############################################################
+
+=head2 screen_main
+
+Display main screen for the master panel. This is called
+automatically by the 'cycle' routine.  Other screen methods
+can be defined if necessary, however judicious use of panels
+should avoid the need for this.
+
+=cut
+
+###############################################################
+
+sub screen_main
+{
+    my ($self) = @_;
+
+    my $cgi = new CGI;
+
+    print
+      $cgi->header() .
+      $cgi->start_form() .
+        $cgi->hidden({name     => 'session_id',
+                      default  => $self->get_session_id(),
+                      override => 1}) .
+	$self->display() .
+      $cgi->end_form();
+}
+
+###############################################################
+
+=head2 handle_event
+
+Handle a button event by passing the event information to the
+appropriate event routine of the correct panel.
+Currently this is always the panel that generates the event.
+
+=cut
+
+###############################################################
+
+sub handle_event
+{
+    my ($self, $event_details) = @_;
+
+    my ($name, $routine_name, $panel_id) = split($self->SEPRE, $event_details);
+    die "ERROR: Unable to obtain name or routine name"
+        unless $name && $routine_name;
+
+    my $real_routine_name = "_event_" . $routine_name;
+
+    my $target_panel = $self->get_panel_by_id($panel_id);
+    $target_panel->$real_routine_name({name => $name});
+}
+
+###############################################################
+
+=head2 handle_link_event
+
+Handle a link event by passing the event information to the
+appropriate event routine of the correct panel.
+Currently this is always the panel that generates the event.
+
+=cut
+
+###############################################################
+
+sub handle_link_event {
+    my ($self, $event_details) = @_;
+
+    $self->handle_event($event_details);
+}
+
+###############################################################
+
+=head2 interpret_messages
+
+Read the request information using the CGI module and
+present this data in a more structured way.  In particular
+this detects events and decodes the information associated
+with them.
+
+=cut
+
+###############################################################
+
+sub interpret_messages
+{
+    my ($self) = @_;
+
+    my $cgi = new CGI;
+    my $t_messages = { map { $_ => $cgi->param($_) } $cgi->param() };
+    my $messages;
+
+    # Need to untaint here
+
+    foreach my $messagename(keys %$t_messages)
+    {
+        # Untaint
+        $t_messages->{$messagename} =~ /^(.*)$/;
+        my $untainted_value = $1;
+        $messages->{$messagename} = $untainted_value;
+
+        # Look for events
+        if ($messagename =~ /^eventbutton\+(.*)$/s)
+        {
+            my $buttondata = $1;
+          #  my $buttonmessages;
+          #  eval ('$buttonmessages = ' . decrypt($buttondata));
+          #  die "ERROR: eval failed ($@)" if $@;
+          #  $messages->{event} = $buttonmessages;
+            $messages->{event} = $buttondata;
+        }
+        # Other parameters can be handled here...
+    }
+
+    return $messages;
+}
+
+###############################################################
+
+=head2 session_directory
+
+This method returns the name of the directory that is used to
+store the session files.  It's currently set to '/tmp'.  Override
+this method to return a different directory if desired.
+
+=cut
+
+###############################################################
+
+sub session_directory {
+    my ($self) = @_;
+
+    # Get cached result if we have it
+    #return $class_session_directory
+    #    if $class_session_directory};
+
+    my $session_directory = '/tmp';
+#    $session_directory = '/tmp/sessions'
+#	if -d '/tmp/sessions';
+    #$class_session_directory = $session_directory;
+    return $session_directory;
+}
+
+###############################################################
+
+=head2 lock_directory
+
+This method returns the name of the directory that is used to
+store the lock files.  It's currently set to '/tmp'.  Override
+this method to return a different directory if desired.
+
+=cut
+
+###############################################################
+
+sub lock_directory {
+    my ($self) = @_;
+
+    # Get cached result if we have it
+    #return $class_lock_directory
+    #    if $class_lock_directory;
+
+    my $lock_directory = '/tmp';
+#    $lock_directory = '/var/lock'
+#        if -d '/var/lock';
+#    $lock_directory = '/var/lock/sessions'
+#        if -d '/var/lock/sessions';
+#    #$class_lock_directory = $lock_directory;
+    return $lock_directory;
+}
+
+###############################################################
+
 1; #this line is important and will help the module return a true value
 __END__
+

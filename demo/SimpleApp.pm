@@ -3,7 +3,7 @@ package SimpleApp;
 use strict;
 use warnings;
 use Basket;
-use base qw(CGI::Panel::MainPanel);
+use base qw(CGI::Panel);
 
 sub init {
     my ($self) = @_;
