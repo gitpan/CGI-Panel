@@ -1,6 +1,5 @@
 package CGI::Panel::MainPanel;
 use strict;
-use base qw(CGI::Panel);
 use CGI;
 use CGI::Carp qw/fatalsToBrowser/;
 use Apache::Session::File;
@@ -8,8 +7,8 @@ use Apache::Session::File;
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.91;
-	@ISA         = qw (Exporter);
+	$VERSION     = 0.92;
+	@ISA         = qw (Exporter CGI::Panel);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
 	%EXPORT_TAGS = ();
@@ -111,8 +110,8 @@ sub todo_get_session {
     my $session_expired;
     my $eval_result = $@;
     if (
-        ($eval_result =~ /Object does not exist in the data store/) ||
-        ($session{mainpanel} && ($session{mainpanel})->state eq 'expired')
+        ($eval_result =~ /Object does not exist in the data store/)
+      ## || ($session{mainpanel} && ($session{mainpanel})->state eq 'expired')
     )
     {
         # Session has expired...
@@ -167,8 +166,8 @@ sub obtain
     my $session_expired;
     my $eval_result = $@;
     if (
-        ($eval_result =~ /Object does not exist in the data store/) ||
-        ($session{mainpanel} && ($session{mainpanel})->state eq 'expired')
+        ($eval_result =~ /Object does not exist in the data store/)
+      ## || ($session{mainpanel} && ($session{mainpanel})->state eq 'expired')
     )
     {
         # Session has expired...
@@ -527,7 +526,9 @@ sub lock_directory {
     #return $class_lock_directory
     #    if $class_lock_directory;
 
-    my $lock_directory = '/var/lock';
+    my $lock_directory = '/tmp';
+    $lock_directory = '/var/lock'
+        if -d '/var/lock';
     $lock_directory = '/var/lock/sessions'
         if -d '/var/lock/sessions';
     #$class_lock_directory = $lock_directory;

@@ -6,3 +6,5 @@ Revision history for Perl extension CGI::Panel.
         - first release on cpan
 0.91  Mon Sep 09
         - corrected dependency specification and doc fixes
+0.92  Thu Sep 26
+        - corrected inheritance problem and added parent and state methods

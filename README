@@ -18,6 +18,10 @@ SYNOPSIS
       in SimpleApp.pm:
 
         package SimpleApp;
+
+        use strict;
+        use warnings;
+        use Basket;
         use base qw(CGI::Panel::MainPanel);
 
         sub init {
@@ -37,13 +41,14 @@ SYNOPSIS
 
             return
                 'This is a very simple app.<p>' .
-                    # Display the persistent data...
+                # Display the persistent data...
                 "My current count is $self->{count}<p>" .
-                    # Display the sub-panel...
+                # Display the sub-panel...
                 $self->panel('basket')->display . '<p>' .
-                    # Display a button that will generate an event...
+                # Display a button that will generate an event...
                 $self->event_button(label => 'Add 1', name => 'add'); 
         }
+
         1;
 
         ---------------
@@ -102,17 +107,33 @@ PUBLIC METHODS
   new
     Creates a new panel object
 
-    Use: my $panel = new Panel;
+    Use:
+
+        my $panel = new Panel;
 
   init
     Initialises a panel object. This should be used to add panels to the
     current panel. We provide a default method here which can be overridden.
 
-    Example: sub init { my ($self) = @_;
+    Example:
 
-            $self->add_panel('first_panel', App::Panel::First);
+        sub init {
+            my ($self) = @_;
+
+            $self->add_panel('first_panel',  App::Panel::First);
             $self->add_panel('second_panel', App::Panel::Second);
         }
+
+  parent
+    Get or set the parent of the panel object.
+
+    Examples: my $parent = $self->parent; $self->parent($other_panel);
+
+  state
+    This method is provided for convenience. Get or set the state. (Simple
+    accessor for $self->{_state})
+
+    Examples: my $state = $self->state; $self->state('STATE1');
 
   get_persistent_id
     Gets the session id for the application
@@ -121,15 +142,23 @@ PUBLIC METHODS
     add_panel routine. This routine traverses up to the main panel by way of
     each panel's 'parent' reference.
 
+    Example:
+
+        my $id = $self->get_persistent_id;
+
   panel
     Retrieves a panel by name
 
-    Example: my $first_panel = $self->panel('first_panel');
+    Example:
+
+        my $first_panel = $self->panel('first_panel');
 
   get_panels
     Retrieves the set of panels as a hash
 
-    Example: my %panels = $self->get_panels;
+    Example:
+
+        my %panels = $self->get_panels;
 
   add_panel
     Adds a panel to the current panel in a way that maintains referential
@@ -137,12 +166,16 @@ PUBLIC METHODS
     panel. All panels should be added to their parents using this routine to
     keep referential integrity and allow certain other mechanisms to work.
 
-    Example: $self->add_panel('first_panel', new App::Panel::First);
+    Example:
+
+        $self->add_panel('first_panel', new App::Panel::First);
 
   remove_panels
     Remove all the panels from the current panel.
 
-    Example: $self->remove_panels;
+    Example:
+
+        $self->remove_panels;
 
   local_params
     Get the parameter list for the current panel. This fetches the parameter
@@ -151,34 +184,49 @@ PUBLIC METHODS
     input controls (textboxes etc) with the same name and they can each
     retrieve the value of that input from their %local_params hash.
 
-    eg my %local_params = $self->local_params my $name =
-    $local_params{name};
+    eg
+
+        my %local_params = $self->local_params
+        my $name = $local_params{name};
 
   event_button
     Display a button which when pressed re-cycles the application and
     generates an event to be handled by the next incarnation of the
-    application.
+    application. The name of the routine that will be called will have
+    _event_ prepended. This is partly for aesthesic reasons but mainly for
+    security, to stop a wily hacker from calling any routine by changing
+    what is passed through the browser. We'll probably be encrypting what is
+    passed through in a later version.
 
-    Input: label: Caption to display on button name: Name of the event
-    routine: Name of the event routine to call (defaults to name value if
-    not specified) ('_event_' is prepended to the routine name) eg:
-    $shop->event_button(label => 'Add Item', name => 'add', routine =>
-    'add');
+      Input:
+        label:    Caption to display on button
+        name:     Name of the event
+        routine:  Name of the event routine to call
+                  (defaults to name value if not specified)
+                  ('_event_' is prepended to the routine name)
+      eg:
+        $shop->event_button(label   => 'Add Item',
+                            name    => 'add',
+                            routine => 'add');
 
   event_link
     Display a link (which can be an image link) which when pressed re-cycles
     the application and generates an event to be handled by the next
     incarnation of the application.
 
-    Input: label: Caption to display on link * OR * pic: Image to display as
-    link
+      Input:
+        label:    Caption to display on link
+         * OR *
+        img:      Image to display as link
 
         name:     Name of the event
         routine:  Name of the event routine to call
                   (defaults to name value if not specified)
                   ('_event_' is prepended to the routine name)
 
-    eg: $shop->event_link(label => 'Add Item', name => 'add')
+      eg:
+        $shop->event_link(label => 'Add Item',
+                          name  => 'add')
 
   CGI input functions
     The CGI input functions are available here with local_ prepended so the

@@ -6,7 +6,7 @@ use CGI::Carp 'fatalsToBrowser';
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.91;
+	$VERSION     = 0.92;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -36,32 +36,37 @@ CGI::Panel - Create sophisticated event-driven web applications from simple pane
   in SimpleApp.pm:
 
     package SimpleApp;
+
+    use strict;
+    use warnings;
+    use Basket;
     use base qw(CGI::Panel::MainPanel);
 
     sub init {
 	my ($self) = @_;
-        $self->add_panel('basket', new Basket); # Add a sub-panel
-        $self->{count} = 1;   # Initialise some persistent data
+	$self->add_panel('basket', new Basket); # Add a sub-panel
+	$self->{count} = 1;   # Initialise some persistent data
     }
 
     sub _event_add {    # Respond to the button click event below
-        my ($self, $event) = @_;
+	my ($self, $event) = @_;
 
-        $self->{count}++;  # Change the persistent data
+	$self->{count}++;  # Change the persistent data
     }
 
     sub display {
-        my ($self) = @_;
+	my ($self) = @_;
 
-        return
-            'This is a very simple app.<p>' .
-                # Display the persistent data...
-            "My current count is $self->{count}<p>" .
-                # Display the sub-panel...
-            $self->panel('basket')->display . '<p>' .
-                # Display a button that will generate an event...
-            $self->event_button(label => 'Add 1', name => 'add'); 
+	return
+	    'This is a very simple app.<p>' .
+	    # Display the persistent data...
+	    "My current count is $self->{count}<p>" .
+	    # Display the sub-panel...
+	    $self->panel('basket')->display . '<p>' .
+	    # Display a button that will generate an event...
+	    $self->event_button(label => 'Add 1', name => 'add'); 
     }
+
     1;
 
     ---------------
@@ -191,6 +196,55 @@ sub init
 
 ###############################################################
 
+=head2 parent
+
+Get or set the parent of the panel object.
+
+Examples:
+    my $parent = $self->parent;
+    $self->parent($other_panel);
+
+=cut
+
+###############################################################
+
+sub parent {
+    my ($self, $parent) = @_;
+
+    die "Parent not a panel object"
+        if $parent && !($parent->isa('CGI::Panel'));
+    $self->{_parent} = $parent if $parent;
+    die "No parent set" unless $self->{_parent};
+
+    return $self->{_parent};
+}
+
+###############################################################
+
+=head2 state
+
+This method is provided for convenience.
+Get or set the state.  (Simple accessor for $self->{_state})
+
+Examples:
+    my $state = $self->state;
+    $self->state('STATE1');
+
+=cut
+
+###############################################################
+
+sub state {
+    my ($self, $state) = @_;
+
+    $self->{_state} = $state if $state;
+    croak "No state set" unless defined($self->{_state});
+
+    return $self->{_state};
+}
+
+###############################################################
+
 =head2 get_persistent_id
 
 Gets the session id for the application
@@ -273,7 +327,7 @@ Example:
 sub get_panels {
     my ($self) = @_;
 
-    return %{$self->{panels}};
+    return $self->{panels} ? %{$self->{panels}} : ();
 }
 
 ###############################################################
