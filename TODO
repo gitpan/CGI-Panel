@@ -10,3 +10,8 @@ Include a ready-to-run example (perhaps the same example as in the synopsis)
 
 Consider explicitly writing action => '?' in the start_form call in screen_main in
 CGI::Panel::MainPanel so that redundant GET parameters are not shown in the URL window.
+
+Merge CGI::Panel::MainPanel into CGI::Panel to make it simpler to use.  Have
+a think about this and decide which way is better.  I really think that
+merging it will be better.
+

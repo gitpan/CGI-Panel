@@ -6,7 +6,7 @@ use CGI::Carp 'fatalsToBrowser';
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.93;
+	$VERSION     = 0.94;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -104,13 +104,16 @@ Until the software reaches version 1.00 it will be considered
 beta software.  You should be able to use it in production code,
 however I strongly recommend that you 'stabilise' your version
 of the module if you release any code that uses it.  By this I
-mean that, once you've tested your app thorougly, you rename
+mean that, once you've tested your app thoroughly, you rename
 CGI::Panel and CGI::Panel::MainPanel as, for example App::CGIPanel
-and APP::Panel::CGIMainPanel and inherit from these, then include
+and App::Panel::CGIMainPanel and inherit from these, then include
 these with your other panels.  This will protect you from any
 changes in the interface.  I'm not planning to make many changes,
-however one thing I'm considering is making the event objects
+however one thing I'm considering is making the events objects
 instead of hashes.
+
+Please let me know by email if you're using the module.  I'll then
+inform you when there's an update.
 
 =head1 USAGE
 
@@ -613,13 +616,15 @@ sub event_link
     my $routine = $args{routine} || $args{name};  # Default to name
     my $other_tags = $args{other_tags};
     my $img_tags = $args{img_tags};
+    my $cgi = new CGI;
+    my $script_name = $cgi->script_name;
 
     my $session_id = $self->get_session_id;
 
     my $SEP = $self->SEP;
     my $n = "$name$SEP$routine$SEP$panel_id";
 
-    my $href = "?session_id=$session_id&n=$n";
+    my $href = "$script_name?session_id=$session_id&n=$n";
     my $args_hash = {
         href => $href,
     };
@@ -627,7 +632,6 @@ sub event_link
         $args_hash->{$other_tag} = $other_tags->{$other_tag}
     }
 
-    my $cgi = new CGI;
     my $output;
     if ($label) {
   #      $output = $cgi->a({href => $href}, $label);
@@ -670,7 +674,7 @@ access to the named input parameter.  So to obtain the value of
 the input parameter above, we would write the following:
 
     my %local_params = $self->local_params;
-    my $test_input_value = $local_params('testinput');
+    my $test_input_value = $local_params{'testinput'};
 
 Note that with this techique, several parameters could have 
 input controls with the same name and they will each receive
@@ -691,7 +695,7 @@ of the same class.
 
 Return a name that has the panel id encoded into it.  This is
 used by the local_... functions and can be used to build a custom
-html input control that will deliver it's value when the panel's
+html input control that will deliver its value when the panel's
 local_params method is called.
 
 Example:

@@ -1,13 +1,14 @@
 package CGI::Panel::MainPanel;
 use strict;
 use CGI;
+use CGI::Panel;
 use CGI::Carp qw/fatalsToBrowser/;
 use Apache::Session::File;
 
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.93;
+	$VERSION     = 0.94;
 	@ISA         = qw (Exporter CGI::Panel);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -504,7 +505,7 @@ sub screen_main
       $cgi->header() .
       $cgi->start_form() .
         $cgi->hidden({name     => 'session_id',
-                      default  => $self->get_persistent_id(),
+                      default  => $self->get_session_id(),
                       override => 1}) .
 	$self->display() .
       $cgi->end_form();
