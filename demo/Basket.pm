@@ -1,6 +1,5 @@
 package Basket;
 
-use strict;
 use base qw(CGI::Panel);
 
 sub init {

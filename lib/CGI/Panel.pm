@@ -7,7 +7,7 @@ use Apache::Session::File;
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.96;
+	$VERSION     = 0.97;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -18,7 +18,7 @@ BEGIN {
 
 =head1 NAME
 
-CGI::Panel - Create sophisticated event-driven web applications from simple panel objects
+CGI::Panel - Create stateful event-driven web applications from simple panel objects
 
 =head1 SYNOPSIS
 
@@ -34,7 +34,6 @@ In SimpleApp.pm:
 
     package SimpleApp;
 
-    use strict;
     use base qw(CGI::Panel);
     use Basket;
 
@@ -69,13 +68,12 @@ In SimpleApp.pm:
     	$self->event_button(label => 'Add 1', name => 'add');
     }
 
-1;
+    1;
 
 In Basket.pm:
 
     package Basket;
 
-    use strict;
     use base qw(CGI::Panel);
     
     sub init {
@@ -84,9 +82,12 @@ In Basket.pm:
         $self->{contents} = [];
     }
     
-    sub _event_add {
+    sub _event_add {  # Respond to the button event in 'display'
         my ($self, $event) = @_;
-    
+
+        # Get panel's localised parameters    
+	# (Many instances of this panel each get
+	# their own local parameters)
         my %local_params = $self->local_params;
     
         push @{$self->{contents}}, $local_params{item_name};
@@ -99,7 +100,9 @@ In Basket.pm:
           '<table bgcolor="#CCCCFF">' .
           join('', (map { "<tr><td>$_</td></tr>" } @{$self->{contents}})) .
           '<tr>' .
+	          # Localised text field
     	  '<td>' . $self->local_textfield({name => 'item_name', size => 10}) . '</td>' .
+                  # Button that will generate an event (handled by _event_add above)
     	  '<td>' . $self->event_button(label => 'Add', name => 'add') . '</td>' .
           '</tr>' .
           '</table>';
@@ -112,11 +115,6 @@ directory and can be seen in action at
 http://www.cyberdesignfactory.com/public-cgi-bin/simpleapp.cgi
 
 =head1 DESCRIPTION
-
-* Please note that the subclass CGI::Panel::MainPanel has now been
-deprecated to make using the module easier.  Please change any code
-which uses the module so that the main panel sub-classes CGI::Panel
-just like the other panels. *
 
 CGI::Panel allows applications to be built out of simple object-based
 components.  It'll handle the state of your data and objects so you
@@ -149,19 +147,8 @@ instances of this panel can then exist simultaneously and each will
 get the correct value of the 'name' parameter when they read their
 parameters (see the 'local_params' method).
 
-Until the software reaches version 1.00 it will be considered
-beta software.  You should be able to use it in production code,
-however I strongly recommend that you 'stabilise' your version
-of the module if you release any code that uses it.  By this I
-mean that, once you've tested your app thoroughly, you rename
-CGI::Panel as, for example App::CGIPanel and inherit from this, then
-include this with your other panels.  This will protect you from any
-changes in the interface.  I'm not planning to make many changes,
-however one thing I'm considering is making the events objects
-instead of hashes.
-
-Please let me know by email if you're using the module.  I'll then
-inform you when there's an update.
+Please let me know by email if you're using the module and would
+like to be informed when there's an update.
 
 =head1 USAGE
 
@@ -352,7 +339,10 @@ sub panel
 {
     my ($self, $panel_name) = @_;
 
-    die "ERROR: No such panel ($panel_name)"
+    confess "ERROR: No such panel ($panel_name)"
+          . " - Can be caused by attaching unstorable "
+          . "data to panel object\n"
+          . "Available panels: " . join("\n", keys %{$self->{panels}})
 	unless $self->{panels}->{$panel_name};
 
     return $self->{panels}->{$panel_name};
@@ -382,7 +372,7 @@ sub get_panels {
 
 =head2 get_id
 
-Gets the id of the panel
+Gets the id of the panel.
 If one is not currently stored, we generate a
 new one with help from the main panel.
 This method can be overridden if you want to give a unique name
@@ -391,13 +381,17 @@ to a panel.
 Examples:
 
     sub get_id { 'unique_name' }
+
 or
+
     my $id = $self->get_id;
 
 and later...
 
     $self->get_panel_by_id('unique_name');
+
 or
+
     $self->get_panel_by_id($id);
 
 See documentation of get_panel_by_id for more details.  (Of course,
@@ -714,7 +708,7 @@ the input parameter above, we would write the following:
     my %local_params = $self->local_params;
     my $test_input_value = $local_params{'testinput'};
 
-Note that with this techique, several parameters could have 
+Note that with this technique, several panels could have 
 input controls with the same name and they will each receive
 the correct value.  This is especially useful for sets of panels
 of the same class.
@@ -850,6 +844,7 @@ sub obtain
     my %session = $class->get_or_create_apache_session($session_id);
 
     my $panel;
+
     if ($session{mainpanel}) {
         $panel = $session{mainpanel};
     }
@@ -961,7 +956,9 @@ sub cycle
 
 =head2 save
 
-Saves an object to persistent storage indexed by session id
+Saves an object to persistent storage indexed by session id.  You don't
+normally need to explicitly call this in your application, as it's called
+during the 'cycle' method.
 
 Use:
 
@@ -989,6 +986,11 @@ sub save
 
     # Store our current state in the tied session hash (ie in persistent storage)
     $session{mainpanel} = $self;
+
+    # Could we have some sort of check here to ensure that the session is
+    # saved correctly.  So if there is a problem (like trying to save
+    # Net::FTP objects or Tangram storage objects where usually nothing
+    # is stored) we detect this and report the problem.
 
     return 1;
 }

@@ -1,6 +1,5 @@
 package SimpleApp;
 
-use strict;
 use base qw(CGI::Panel);
 use Basket;
 
