@@ -5,5 +5,8 @@ WriteMakefile(
     NAME         => 'CGI::Panel',
     VERSION_FROM => 'lib/CGI/Panel.pm', # finds $VERSION
     AUTHOR       => 'Robert J. Symes (rob@robsymes.com)',
-    ABSTRACT     => 'Create sophisticated event-driven web applications from simple panel objects'
+    ABSTRACT     => 'Create sophisticated event-driven web applications from simple panel objects',
+    PREREQ_PM    => {
+        'Apache::Session::File' => '0'
+    }
 );

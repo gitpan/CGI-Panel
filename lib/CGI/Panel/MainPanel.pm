@@ -8,7 +8,7 @@ use Apache::Session::File;
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.90;
+	$VERSION     = 0.91;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -80,6 +80,7 @@ This will either restore the current master panel session
 or create a new one
 
 Use:
+
     my $shop = obtain Shop;
 
 =cut
@@ -217,6 +218,7 @@ and displaying the updated screen.  Also manages persistence
 for the panel hierarchy.
 
 Use:
+
     $shop->cycle();
 
 =cut
@@ -258,6 +260,10 @@ sub cycle
 Gets a special 'id' value that is specific to this particular
 session
 
+Use:
+
+    my $id = $self->get_persistent_id;
+
 =cut
 
 ###############################################################
@@ -278,6 +284,10 @@ sub get_persistent_id
 =head2 save
 
 Saves an object to persistent storage indexed by session id
+
+Use:
+
+    $self->save;
 
 =cut
 
@@ -309,7 +319,17 @@ sub save
 
 =head2 get_panel
 
-Look up the panel in our list and return it
+Look up the panel in our list and return it.  Note that this is
+different to the 'panel' routine in CGI::Panel, which gets a
+sub-panel of the current panel by name.  All the panels
+in a an application should be registered with the main panel
+which stores them in a special hash with an automatically
+generated key.  This routine gets any panel in the application
+based on the key supplied.
+
+Use:
+
+    my $panel_id = $main_panel->get_panel(3);
 
 =cut
 
@@ -331,7 +351,11 @@ sub get_panel
 =head2 register_panel
 
 Accept a panel object and 'register' it - ie store a reference to
-it in a special list.  Return the id to the caller.
+it in a special list.  Return the id (hash key) to the caller.
+
+Use:
+
+    my $id = $main_panel->register($panel);
 
 =cut
 
@@ -352,9 +376,23 @@ sub register_panel
 
 ###############################################################
 
+=head1 OTHER METHODS
+
+The following methods are used behind the scenes, usually from
+the 'cycle' method above.  They will generally be sufficient as
+they are but can be overridden if necessary for greater
+flexibility.
+
+=cut
+
+###############################################################
+
 =head2 screen_main
 
-Display main screen for the master panel
+Display main screen for the master panel. This is called
+automatically by the 'cycle' routine.  Other screen methods
+can be defined if necessary, however judicious use of panels
+should avoid the need for this.
 
 =cut
 
@@ -378,7 +416,7 @@ sub screen_main
 
 ###############################################################
 
-=head2 handle_button_event
+=head2 handle_event
 
 Handle a button event by passing the event information to the
 appropriate event routine of the correct panel.
@@ -402,7 +440,17 @@ sub handle_event
     $target_panel->$real_routine_name({name => $name});
 }
 
-#################################
+###############################################################
+
+=head2 handle_link_event
+
+Handle a link event by passing the event information to the
+appropriate event routine of the correct panel.
+Currently this is always the panel that generates the event.
+
+=cut
+
+###############################################################
 
 sub handle_link_event {
     my ($self, $event_details) = @_;

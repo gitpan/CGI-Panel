@@ -2,4 +2,7 @@ Revision history for Perl extension CGI::Panel.
 
 0.01  Wed Sep 04 16:15:37 2002
 	- original version; created by ExtUtils::ModuleMaker 0.204
-
+0.90  Sat Sep 07
+        - first release on cpan
+0.91  Mon Sep 09
+        - corrected dependency specification and doc fixes

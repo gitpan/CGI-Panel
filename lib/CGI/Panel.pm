@@ -6,7 +6,7 @@ use CGI::Carp 'fatalsToBrowser';
 BEGIN {
 	use Exporter ();
 	use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-	$VERSION     = 0.90;
+	$VERSION     = 0.91;
 	@ISA         = qw (Exporter);
 	@EXPORT      = qw ();
 	@EXPORT_OK   = qw ();
@@ -141,6 +141,7 @@ These are how you should interact with this module.
 Creates a new panel object
 
 Use:
+
     my $panel = new Panel;
 
 =cut
@@ -169,10 +170,11 @@ to the current panel.  We provide a default method here which
 can be overridden.
 
 Example:
+
     sub init {
         my ($self) = @_;
 
-        $self->add_panel('first_panel', App::Panel::First);
+        $self->add_panel('first_panel',  App::Panel::First);
         $self->add_panel('second_panel', App::Panel::Second);
     }
 
@@ -196,6 +198,10 @@ Gets the session id for the application
 Note:  It's essential that all panels are added using the
 proper add_panel routine.  This routine traverses up to the
 main panel by way of each panel's 'parent' reference.
+
+Example:
+
+    my $id = $self->get_persistent_id;
 
 =cut
 
@@ -233,6 +239,7 @@ sub get_session_id {
 Retrieves a panel by name
 
 Example:
+
     my $first_panel = $self->panel('first_panel');
 
 =cut
@@ -243,9 +250,7 @@ sub panel
 {
     my ($self, $panel_name) = @_;
 
-    #use Data::Dumper;
     die "ERROR: No such panel ($panel_name)"
-    #    . - our panels are" . Dumper($self->{panels})
 	unless $self->{panels}->{$panel_name};
 
     return $self->{panels}->{$panel_name};
@@ -258,6 +263,7 @@ sub panel
 Retrieves the set of panels as a hash
 
 Example:
+
     my %panels = $self->get_panels;
 
 =cut
@@ -279,25 +285,16 @@ sub get_panels {
 sub get_id {
     my ($self) = @_;
 
-  #  my $cgi = new CGI;
-  #  use Data::Dumper;
-
     unless ($self->{id}) {
         my $main_panel = $self->main_panel;
         $self->{id} = $main_panel->register_panel($self);
     }
 
-  #  print $cgi->header . 'GET_ID: id for ' . Dumper($self) . ' is ' . $self->{id} . '<p>';
-
-  #  print 'LETS CHECK - panel ' . $self->{id} . ' is ' . Dumper($self->main_panel->get_panel($self->{id})) . '<p>';
-
     return $self->{id};
-
-
 }
 
 ###############################################################
-
+#
 # Get the main panel (by recursing up the panel tree)
 #
 # This better method could be used to avoid the problem
@@ -313,7 +310,6 @@ sub main_panel {
     return $self->isa('CGI::Panel::MainPanel') ?
         $self :
         $self->parent->main_panel;
-
 }
 
 ###############################################################
@@ -327,6 +323,7 @@ their parents using this routine to keep referential integrity
 and allow certain other mechanisms to work.
 
 Example:
+
     $self->add_panel('first_panel', new App::Panel::First);
 
 =cut
@@ -348,6 +345,7 @@ sub add_panel
 Remove all the panels from the current panel.
 
 Example:
+
     $self->remove_panels;
 
 =cut
@@ -372,6 +370,7 @@ with the same name and they can each retrieve the value of
 that input from their %local_params hash.
 
 eg
+
     my %local_params = $self->local_params
     my $name = $local_params{name};
 
@@ -406,17 +405,21 @@ sub local_params
 
 Display a button which when pressed re-cycles the application
 and generates an event to be handled by the next incarnation of
-the application.
+the application.  The name of the routine that will be called
+will have _event_ prepended.  This is partly for aesthesic reasons
+but mainly for security, to stop a wily hacker from calling any
+routine by changing what is passed through the browser.  We'll
+probably be encrypting what is passed through in a later version.
 
-Input:
+  Input:
     label:    Caption to display on button
     name:     Name of the event
     routine:  Name of the event routine to call
               (defaults to name value if not specified)
               ('_event_' is prepended to the routine name)
-eg:
-    $shop->event_button(label => 'Add Item',
-                        name  => 'add',
+  eg:
+    $shop->event_button(label   => 'Add Item',
+                        name    => 'add',
                         routine => 'add');
 
 =cut
@@ -452,17 +455,17 @@ Display a link (which can be an image link) which when pressed
 re-cycles the application and generates an event to be handled
 by the next incarnation of the application.
 
-Input:
+  Input:
     label:    Caption to display on link
      * OR *
-    pic:      Image to display as link
+    img:      Image to display as link
 
     name:     Name of the event
     routine:  Name of the event routine to call
               (defaults to name value if not specified)
               ('_event_' is prepended to the routine name)
 
-eg:
+  eg:
     $shop->event_link(label => 'Add Item',
                       name  => 'add')
 
